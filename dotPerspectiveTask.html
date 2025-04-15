@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dot Perspective Task</title>
+
+  <!-- jsPsych 7 CDN -->
+  <script src="https://unpkg.com/jspsych@7.3.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.2"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@1.1.2"></script>
+  <link href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" rel="stylesheet">
+
+  <style>
+    html, body, #jspsych-target {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #f0f0f0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .centered-content {
+      font-size: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #continue-button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background-color: #808080;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div id="jspsych-target"></div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const jsPsych = initJsPsych({ display_element: 'jspsych-target' });
+
+  // --- Utility Functions ---
+  const parseStimulusName = fileName => {
+    let name = fileName.replace('.png', '');
+    const isFan = name.includes('fan');
+    name = name.replace('fan', '');
+    const direction = name.slice(-1);
+    const dotConfig = name.slice(0, -1);
+    const dotsLeft = dotConfig.length === 1 ? (direction === 'l' ? parseInt(dotConfig) : 0) : parseInt(dotConfig[0]);
+    const dotsRight = dotConfig.length === 1 ? (direction === 'r' ? parseInt(dotConfig) : 0) : parseInt(dotConfig[1]);
+    return { isFan, direction, dotsLeft, dotsRight };
+  };
+
+  const computeTrialLogic = (stimulus, cue, digitPrompt) => {
+    const info = parseStimulusName(stimulus);
+    const dotsYouSee = info.dotsLeft + info.dotsRight;
+    const dotsTheySee = info.direction === 'l' ? info.dotsLeft : info.dotsRight;
+    const correctDotCount = cue === 'YOU' ? dotsYouSee : dotsTheySee;
+    const correctResponse = digitPrompt === correctDotCount ? 'y' : 'n';
+    return { correctResponse };
+  };
+
+  // --- Practice Config ---
+  const practiceConfig = [
+    ["4l.png", "YOU", 4], ["4l.png", "PERSON", 4],
+    ["31r.png", "YOU", 4], ["31r.png", "PERSON", 3],
+    ["fan2r.png", "YOU", 2], ["fan2r.png", "OBJECT", 2],
+    ["fan3r.png", "OBJECT", 1], ["30l.png", "YOU", 3],
+    ["30l.png", "PERSON", 3], ["fan4l.png", "OBJECT", 2],
+    ["5r.png", "PERSON", 2], ["0l.png", "YOU", 0],
+    ["0l.png", "PERSON", 0], ["fan0r.png", "OBJECT", 0],
+  ];
+
+  // --- Preload ---
+  const preloadImages = practiceConfig.map(([stim]) => `https://github.com/vstradag/dotPerspectiveTask/blob/main/${stim}?raw=true`);
+  const timeline = [{ type: jsPsychPreload, images: preloadImages }];
+
+  // --- Instructions ---
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div style="text-align: left; font-size: 20px; max-width: 800px; margin: 0 auto;">
+        <p>In this experiment, you will see a room with a person or an object (a desk fan) placed in the center, facing either left or right.</p>
+        <p>Red dots will appear on the left and/or right walls of the room.</p>
+        <p>At the beginning of each trial, you will see a word that tells you which perspective to use:</p>
+        <ul>
+          <li><strong>"YOU"</strong> – Count all the dots you can see.</li>
+          <li><strong>"PERSON"</strong> – Count only the dots the person can see.</li>
+          <li><strong>"OBJECT"</strong> – Count only the dots the object is facing.</li>
+        </ul>
+        <p>Then you will see a number. Decide if it matches the number of dots for that perspective.</p>
+        <p>Press <strong>'y'</strong> for Yes, <strong>'n'</strong> for No.</p>
+      </div>
+    `,
+    choices: ['Start practice trials'],
+    button_html: '<button id="continue-button" disabled>%choice%</button>',
+    on_load: () => setTimeout(() => {
+      const btn = document.getElementById('continue-button');
+      btn.disabled = false;
+      btn.style.backgroundColor = '#4CAF50';
+    }, 1500)
+  });
+
+  // --- Practice Trials ---
+  practiceConfig.forEach(([stimFile, cue, digit]) => {
+    const imageUrl = `https://github.com/vstradag/dotPerspectiveTask/blob/main/${stimFile}?raw=true`;
+    const { correctResponse } = computeTrialLogic(stimFile, cue, digit);
+
+    timeline.push(
+      { type: jsPsychHtmlKeyboardResponse, stimulus: '+', choices: 'NO_KEYS', trial_duration: 500 },
+      { type: jsPsychHtmlKeyboardResponse, stimulus: `<div class="centered-content">${cue}</div>`, choices: 'NO_KEYS', trial_duration: 750 },
+      { type: jsPsychHtmlKeyboardResponse, stimulus: `<div class="centered-content">${digit}</div>`, choices: 'NO_KEYS', trial_duration: 750 },
+      {
+        type: jsPsychImageKeyboardResponse,
+        stimulus: imageUrl,
+        choices: ['y', 'n'],
+        trial_duration: 2000,
+        data: { stimFile, cue, digit, correct_response: correctResponse },
+        on_finish: data => data.correct = jsPsych.pluginAPI.compareKeys(data.response, data.correct_response)
+      },
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: () => {
+          const last = jsPsych.data.get().last(1).values()[0];
+          if (!last.response) return '<div class="centered-content" style="font-size: 24px;">Too slow!</div>';
+          return `<div class="centered-content" style="font-size: 24px;">${last.correct ? 'Correct!' : 'Incorrect.'}</div>`;
+        },
+        choices: 'NO_KEYS',
+        trial_duration: 1000
+      }
+    );
+  });
+
+  // --- Run ---
+  jsPsych.run(timeline);
+});
+</script>
+</body>
+</html>
